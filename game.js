@@ -2,8 +2,16 @@
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 
-// Import pause handler
+// Import handlers
 import { pauseHandler } from './pauseHandler.js';
+import { obstacleHandler } from './obstacleHandler.js';
+
+// Listen for obstacle system requesting car position
+document.addEventListener('requestCarPosition', () => {
+    if (gameState.isRunning) {
+        obstacleHandler.createObstacle(carPosition);
+    }
+});
 
 // Get UI elements
 const startBtn = document.getElementById('startBtn');
@@ -26,6 +34,8 @@ window.addEventListener('resize', resizeCanvas);
 const TRACK_PADDING = 100; // Padding from window edges
 const TRACK_WIDTH = 80;
 const CAR_SIZE = 40;
+const OBSTACLE_COLOR = '#c0392b';
+const COLLISION_PENALTY = 5; // Seconds
 
 // Track dimensions
 const TRACK_LEFT = TRACK_PADDING;
@@ -38,12 +48,13 @@ let gameState = {
     isRunning: false,
     startTime: 0,
     currentTime: 0,
-    hasCompletedLap: false
+    hasCompletedLap: false,
+    penaltyTime: 0
 };
 
 // Car properties
 let carPosition = 0; // 0 to 1 represents position along track
-let carSpeed = 0.0005;
+let carSpeed = 0.001;
 
 // Colors
 const TRACK_COLOR = '#34495e';
@@ -59,8 +70,10 @@ function startGame() {
     gameState.isRunning = true;
     gameState.startTime = Date.now();
     gameState.hasCompletedLap = false;
+    gameState.penaltyTime = 0;
     carPosition = 0;
     startBtn.disabled = true;
+    obstacleHandler.start();
 }
 
 function cancelGame() {
@@ -68,9 +81,11 @@ function cancelGame() {
     gameState.startTime = 0;
     gameState.currentTime = 0;
     gameState.hasCompletedLap = false;
+    gameState.penaltyTime = 0;
     carPosition = 0;
     startBtn.disabled = false;
     timerDisplay.textContent = 'Time: 0.00s';
+    obstacleHandler.stop();
 }
 
 function drawTrack() {
@@ -97,6 +112,34 @@ function drawTrack() {
     ctx.closePath();
     ctx.fillStyle = GRASS_COLOR;
     ctx.fill();
+}
+
+function drawObstacle() {
+    const obstacle = obstacleHandler.getObstacle();
+    if (obstacle && obstacle.active) {
+        const { x, y, angle } = getCarCoordinates(obstacle.position);
+        
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.rotate(angle);
+        
+        // Draw warning triangle
+        ctx.beginPath();
+        ctx.moveTo(0, -obstacle.size);
+        ctx.lineTo(obstacle.size/2, obstacle.size/2);
+        ctx.lineTo(-obstacle.size/2, obstacle.size/2);
+        ctx.closePath();
+        
+        ctx.fillStyle = OBSTACLE_COLOR;
+        ctx.fill();
+        
+        // Add warning stripes
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        
+        ctx.restore();
+    }
 }
 
 function getCarCoordinates(position) {
@@ -168,6 +211,15 @@ function drawCar() {
     ctx.restore();
 }
 
+function checkCollision() {
+    if (obstacleHandler.checkCollision(carPosition)) {
+        gameState.penaltyTime += COLLISION_PENALTY;
+        // Remove the obstacle after collision
+        obstacleHandler.stop();
+        obstacleHandler.start();
+    }
+}
+
 function updateCar() {
     if (gameState.isRunning && !pauseHandler.isPausedState() && !gameState.hasCompletedLap) {
         carPosition += carSpeed;
@@ -176,14 +228,16 @@ function updateCar() {
             gameState.hasCompletedLap = true;
             gameState.isRunning = false;
             startBtn.disabled = false;
+            obstacleHandler.stop();
         }
+        checkCollision();
     }
 }
 
 function updateTimer() {
     if (gameState.isRunning && !gameState.hasCompletedLap) {
-        gameState.currentTime = (Date.now() - gameState.startTime) / 1000;
-        timerDisplay.textContent = `Time: ${gameState.currentTime.toFixed(2)}s`;
+        gameState.currentTime = (Date.now() - gameState.startTime) / 1000 + gameState.penaltyTime;
+        timerDisplay.textContent = `Time: ${gameState.currentTime.toFixed(2)}s${gameState.penaltyTime > 0 ? ' (+' + gameState.penaltyTime + 's penalty)' : ''}`;
     }
 }
 
@@ -193,6 +247,7 @@ function gameLoop() {
     
     // Draw game elements
     drawTrack();
+    drawObstacle();
     drawCar();
     
     // Update game state
