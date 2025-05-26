@@ -1,0 +1,17 @@
+{
+  "name": "simple-race",
+  "version": "1.0.0",
+  "description": "A simple Electron Hello World app",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "electron": "^28.0.0",
+    "electron-reloader": "^1.2.3"
+  }
+}
